@@ -1,2 +1,5 @@
 .env
 firebase_config.json
+pycache__/
+routers/pycache__/
+services/pycache__/
