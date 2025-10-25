@@ -31,6 +31,9 @@ const { width, height } = Dimensions.get("window");
 export default function Index() {
   const [isLogin, setIsLogin] = useState(true);
   const [animationFinished, setAnimationFinished] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const router = useRouter();
   const redTranslate = useRef(new Animated.Value(0)).current;
@@ -68,6 +71,11 @@ export default function Index() {
       return;
     }
 
+    // Validate required fields for sign up
+    if (!email.trim() || !password.trim()) {
+      return; // Don't proceed if email or password is empty
+    }
+
     router.push("/onboarding/location");
   };
   return (
@@ -83,9 +91,11 @@ export default function Index() {
         <View style={styles.form}>
           {!isLogin && (
             <TextInput
-              placeholder="Full name"
+              placeholder="Full name (optional)"
               placeholderTextColor="rgba(255,255,255,0.6)"
               style={styles.input}
+              value={fullName}
+              onChangeText={setFullName}
             />
           )}
           <TextInput
@@ -94,16 +104,30 @@ export default function Index() {
             autoCapitalize="none"
             keyboardType="email-address"
             style={styles.input}
+            value={email}
+            onChangeText={setEmail}
           />
           <TextInput
             placeholder="Password"
             placeholderTextColor="rgba(255,255,255,0.6)"
             secureTextEntry
             style={styles.input}
+            value={password}
+            onChangeText={setPassword}
           />
   
-          <TouchableOpacity style={styles.primaryButton} onPress={handlePrimaryPress}>
-            <Text style={styles.primaryButtonText}>
+          <TouchableOpacity 
+            style={[
+              styles.primaryButton,
+              !isLogin && (!email.trim() || !password.trim()) && styles.primaryButtonDisabled
+            ]} 
+            onPress={handlePrimaryPress}
+            disabled={!isLogin && (!email.trim() || !password.trim())}
+          >
+            <Text style={[
+              styles.primaryButtonText,
+              !isLogin && (!email.trim() || !password.trim()) && styles.primaryButtonTextDisabled
+            ]}>
               {isLogin ? "Log In" : "Sign Up"}
             </Text>
           </TouchableOpacity>
@@ -202,6 +226,12 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  primaryButtonDisabled: {
+    backgroundColor: "rgba(239, 35, 60, 0.3)",
+  },
+  primaryButtonTextDisabled: {
+    color: "rgba(255,255,255,0.5)",
   },
   secondaryButton: {
     alignSelf: "center",
