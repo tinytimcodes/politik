@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import {
   Animated,
   Dimensions,
@@ -31,6 +32,7 @@ export default function Index() {
   const [isLogin, setIsLogin] = useState(true);
   const [animationFinished, setAnimationFinished] = useState(false);
 
+  const router = useRouter();
   const redTranslate = useRef(new Animated.Value(0)).current;
   const blueTranslate = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(1)).current;
@@ -61,6 +63,13 @@ export default function Index() {
   
   const toggleAuthMode = () => setIsLogin((prev) => !prev);
   
+  const handlePrimaryPress = () => {
+    if (isLogin) {
+      return;
+    }
+
+    router.push("/onboarding/location");
+  };
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -93,7 +102,7 @@ export default function Index() {
             style={styles.input}
           />
   
-          <TouchableOpacity style={styles.primaryButton}>
+          <TouchableOpacity style={styles.primaryButton} onPress={handlePrimaryPress}>
             <Text style={styles.primaryButtonText}>
               {isLogin ? "Log In" : "Sign Up"}
             </Text>
