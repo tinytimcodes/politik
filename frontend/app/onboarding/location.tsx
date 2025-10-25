@@ -31,7 +31,7 @@ export default function LocationScreen() {
   const [zipValue, setZipValue] = useState("");
 
   const handleContinue = () => {
-    router.replace("/");
+    router.push("/onboarding/interests");
   };
 
   const handleSkip = () => {

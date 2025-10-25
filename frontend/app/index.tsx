@@ -117,6 +117,15 @@ export default function Index() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {!isLogin && (
+        <View style={styles.progressContainer}>
+          <View style={[styles.progressDot, styles.progressDotActive]} />
+          <View style={styles.progressDot} />
+          <View style={styles.progressDot} />
+          <View style={styles.progressDot} />
+        </View>
+      )}
   
       {!animationFinished && (
   <View style={styles.splashContainer} pointerEvents="none">
@@ -241,5 +250,23 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontWeight: "900",
     letterSpacing: -8,
+  },
+  progressContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 24,
+  },
+  progressDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.4)",
+  },
+  progressDotActive: {
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: "#ffffff",
   },
 });
