@@ -4,3 +4,4 @@ python-dotenv
 firebase-admin
 httpx
 pydantic
+google-generativeai
