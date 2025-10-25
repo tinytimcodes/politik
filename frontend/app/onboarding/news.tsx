@@ -36,7 +36,7 @@ export default function NewsScreen() {
   const [selectedRecency, setSelectedRecency] = useState<string>("");
 
   const handleContinue = () => {
-    router.replace("/");
+    router.replace("/dashboard/initialdash");
   };
 
   const handleSkip = () => {

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
   user: User | null;
@@ -25,9 +26,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      setLoading(false);
+      // Persist username/email into AsyncStorage when logged in
+      try {
+        if (user) {
+          const email = user.email ?? '';
+          const displayName = user.displayName ?? '';
+          await AsyncStorage.setItem('@user_email', email);
+          await AsyncStorage.setItem('@user_displayName', displayName);
+          // mirror a single JSON key that other parts of the app expect
+          const authUser = JSON.stringify({ email, displayName });
+          await AsyncStorage.setItem('authUser', authUser);
+        }
+      } catch (err) {
+        // Non-fatal: log to console. Components can still rely on firebase user.
+        // eslint-disable-next-line no-console
+        console.warn('AsyncStorage write failed for auth values:', err);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return unsubscribe;

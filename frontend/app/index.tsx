@@ -22,6 +22,11 @@ import {
 import { auth } from "@/lib/firebase";
 import { useAuth } from "../lib/AuthContext";
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
+
+
 const getFriendlyAuthError = (error: any, isLogin: boolean): string => {
   if (error instanceof FirebaseError) {
     switch (error.code) {
@@ -75,7 +80,9 @@ export default function Index() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+
   const { user, loading } = useAuth();
+  const [restoringFromStorage, setRestoringFromStorage] = useState(true);
   const router = useRouter();
   const redTranslate = useRef(new Animated.Value(0)).current;
   const blueTranslate = useRef(new Animated.Value(0)).current;
@@ -105,6 +112,30 @@ export default function Index() {
     return () => clearTimeout(timeout);
   }, [blueTranslate, logoOpacity, redTranslate]);
 
+  useEffect(() => {
+  const checkStoredSession = async () => {
+    if (user || loading) {
+      setRestoringFromStorage(false);
+      return;
+    }
+
+    try {
+      const storedCredentials = await AsyncStorage.getItem('authUser'); // use your actual key
+      if (storedCredentials) {
+        router.replace('/dashboard/initialdash');
+        return;
+      }
+    } catch (error) {
+      console.warn('Failed to restore session from storage', error);
+    } finally {
+      setRestoringFromStorage(false);
+    }
+  };
+
+  checkStoredSession();
+}, [user, loading, router]);
+
+
   // Redirect authenticated users
   // useEffect(() => {
   //   if (!loading && user) {
@@ -133,7 +164,7 @@ export default function Index() {
     try {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-        router.replace("/onboarding/news");
+        router.replace("/dashboard/initialdash");
       } else {
         const credential = await createUserWithEmailAndPassword(
           auth,
