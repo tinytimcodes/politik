@@ -1,6 +1,10 @@
 import { Stack } from "expo-router";
+import { AuthProvider } from "../lib/AuthContext";
 
 export default function RootLayout() {
-  // hide the default header/title for the root navigation stack
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </AuthProvider>
+  );
 }

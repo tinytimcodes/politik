@@ -1,6 +1,10 @@
 import { Stack } from "expo-router";
+import { ProtectedRoute } from "../../components/ProtectedRoute";
 
 export default function OnboardingLayout() {
-  // hide the header for onboarding screens so the top title doesn't appear
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <ProtectedRoute>
+      <Stack screenOptions={{ headerShown: false }} />
+    </ProtectedRoute>
+  );
 }

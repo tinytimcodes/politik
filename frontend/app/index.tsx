@@ -2,15 +2,53 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Platform
 } from "react-native";
+import { FirebaseError } from "firebase/app";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
+
+import { auth } from "@/lib/firebase";
+import { useAuth } from "../lib/AuthContext";
+
+const getFriendlyAuthError = (error: any, isLogin: boolean): string => {
+  if (error instanceof FirebaseError) {
+    switch (error.code) {
+      case 'auth/user-not-found':
+        return 'No account found with this email address.';
+      case 'auth/wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'auth/email-already-in-use':
+        return 'An account with this email already exists.';
+      case 'auth/weak-password':
+        return 'Password should be at least 6 characters.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/too-many-requests':
+        return 'Too many failed attempts. Please try again later.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return isLogin 
+          ? 'Failed to sign in. Please try again.' 
+          : 'Failed to create account. Please try again.';
+    }
+  }
+  return isLogin 
+    ? 'Failed to sign in. Please try again.' 
+    : 'Failed to create account. Please try again.';
+};
 
 const HEADLINE_FONT = Platform.select({
   ios: "Georgia",                                // iOS serif (Cheltenham-ish vibe)
@@ -34,7 +72,10 @@ export default function Index() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { user, loading } = useAuth();
   const router = useRouter();
   const redTranslate = useRef(new Animated.Value(0)).current;
   const blueTranslate = useRef(new Animated.Value(0)).current;
@@ -63,21 +104,72 @@ export default function Index() {
   
     return () => clearTimeout(timeout);
   }, [blueTranslate, logoOpacity, redTranslate]);
+
+  // Redirect authenticated users
+  // useEffect(() => {
+  //   if (!loading && user) {
+  //     router.replace("/onboarding/news");
+  //   }
+  // }, [user, loading, router]);
   
-  const toggleAuthMode = () => setIsLogin((prev) => !prev);
+  const toggleAuthMode = () => {
+    setIsLogin((prev) => !prev);
+    setAuthError(null);
+  };
   
-  const handlePrimaryPress = () => {
-    if (isLogin) {
+  const handlePrimaryPress = async () => {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedFullName = fullName.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      setAuthError("Email and password are required.");
       return;
     }
 
-    // Validate required fields for sign up
-    if (!email.trim() || !password.trim()) {
-      return; // Don't proceed if email or password is empty
-    }
+    setAuthError(null);
+    setIsSubmitting(true);
 
-    router.push("/onboarding/location");
+    try {
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+        router.replace("/onboarding/news");
+      } else {
+        const credential = await createUserWithEmailAndPassword(
+          auth,
+          trimmedEmail,
+          trimmedPassword
+        );
+
+        if (trimmedFullName) {
+          await updateProfile(credential.user, { displayName: trimmedFullName });
+        }
+
+        router.replace("/onboarding/location");
+      }
+    } catch (error) {
+      setAuthError(getFriendlyAuthError(error, isLogin));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const isFormIncomplete = !email.trim() || !password.trim();
+  const isPrimaryDisabled = isFormIncomplete || isSubmitting;
+
+  // Show loading screen while checking auth state
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ef233c" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -116,20 +208,28 @@ export default function Index() {
             onChangeText={setPassword}
           />
   
+          {authError && (
+            <Text style={styles.errorText}>{authError}</Text>
+          )}
+
           <TouchableOpacity 
             style={[
               styles.primaryButton,
-              !isLogin && (!email.trim() || !password.trim()) && styles.primaryButtonDisabled
+              isPrimaryDisabled && styles.primaryButtonDisabled
             ]} 
             onPress={handlePrimaryPress}
-            disabled={!isLogin && (!email.trim() || !password.trim())}
+            disabled={isPrimaryDisabled}
           >
-            <Text style={[
-              styles.primaryButtonText,
-              !isLogin && (!email.trim() || !password.trim()) && styles.primaryButtonTextDisabled
-            ]}>
-              {isLogin ? "Log In" : "Sign Up"}
-            </Text>
+            {isSubmitting ? (
+              <ActivityIndicator color="#ffffff" size="small" />
+            ) : (
+              <Text style={[
+                styles.primaryButtonText,
+                isPrimaryDisabled && styles.primaryButtonTextDisabled
+              ]}>
+                {isLogin ? "Log In" : "Sign Up"}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
   
@@ -232,6 +332,24 @@ const styles = StyleSheet.create({
   },
   primaryButtonTextDisabled: {
     color: "rgba(255,255,255,0.5)",
+  },
+  errorText: {
+    color: "#ef233c",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0b132b",
+  },
+  loadingText: {
+    color: "#ffffff",
+    fontSize: 16,
+    marginTop: 16,
   },
   secondaryButton: {
     alignSelf: "center",
