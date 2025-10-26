@@ -13,7 +13,24 @@ router = APIRouter()
 CONGRESS_API_KEY = os.getenv("CONGRESS_API_KEY")
 BASE_URL = "https://api.congress.gov/v3/bill"
 
-
+async def safe_fetch(url: str):
+    """Reusable helper with timeout, JSON guard, and error text fallback."""
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(url)
+            if r.status_code != 200:
+                raise HTTPException(status_code=r.status_code, detail=r.text)
+            try:
+                return r.json()
+            except Exception:
+                # If API returned HTML, show first 200 chars for debugging
+                raise HTTPException(status_code=500,
+                    detail=f"Non-JSON response from Congress.gov: {r.text[:200]}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Congress.gov timed out (slow endpoint).")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Congress.gov fetch error: {e}")
+    
 def get_current_interval():
     """Return current cache interval (timedelta) based on weekday/time."""
     now = datetime.now()
@@ -57,7 +74,7 @@ async def get_bill_details(congress: int, billType: str, billNumber: str):
                 status_code=response.status_code,
                 detail=f"Congress API returned {response.status_code}: {response.text}",
             )
-
+        print(response.json())
         return response.json()
 
     except Exception as e:
@@ -69,7 +86,7 @@ async def get_bill_actions(congress: int, billType: str, billNumber: str):
     Fetch all actions for a given bill from Congress.gov.
     Returns the raw JSON response directly.
     """
-    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}/actions?api_key={CONGRESS_API_KEY}&format=json"
+    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}/actions?api_key={CONGRESS_API_KEY2}&format=json"
 
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
@@ -80,23 +97,13 @@ async def get_bill_actions(congress: int, billType: str, billNumber: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching bill actions: {str(e)}")
 
-
 @router.get("/billsummaries")
 async def get_bill_summaries(congress: int, billType: str, billNumber: str):
-    """
-    Fetch all summaries for a given bill from Congress.gov.
-    Returns the raw JSON response directly.
-    """
-    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}/summaries?api_key={CONGRESS_API_KEY}&format=json"
+    url = f"{BASE_URL}/{congress}/{billType}/{billNumber}/summaries?api_key={CONGRESS_API_KEY}&format=json"
+    data = await safe_fetch(url)
+    return data
 
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(url)
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=response.text)
-            return response.json()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching bill summaries: {str(e)}")
+
 
 
 @router.get("/billsubjects")
@@ -115,7 +122,6 @@ async def get_bill_subjects(congress: int, billType: str, billNumber: str):
             return response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching bill subjects: {str(e)}")
-
 
 @router.get("/latest")
 async def get_latest_bills(limit: int = 5):
