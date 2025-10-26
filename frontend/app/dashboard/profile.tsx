@@ -73,8 +73,8 @@ export default function Profile() {
     setRefreshing(false);
   }, [fetchProfile]);
 
-  const onProfilePress = () => {
-    router.push("/dashboard/profile");
+  const onBillTab = () => {
+    router.back();
   };
 
   const recencyText = useMemo(() => {
@@ -149,12 +149,12 @@ export default function Profile() {
         <View style={styles.tabBar}>
           
 
-          <TouchableOpacity style={styles.tab} onPress={() => {}}>
+          <TouchableOpacity style={styles.tab} onPress={onBillTab}>
             <MaterialCommunityIcons name="receipt-text-outline" size={28} />
             <Text style={styles.tabLabel}>Bills</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tab} onPress={onProfilePress}>
+          <TouchableOpacity style={styles.tab} onPress={() => {}}>
             <Ionicons name="person-outline" size={26} />
             <Text style={styles.tabLabel}>Profile</Text>
           </TouchableOpacity>

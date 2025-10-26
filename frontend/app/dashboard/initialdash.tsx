@@ -105,9 +105,6 @@ export default function Dashboard() {
   const onProfilePress = () => {
     router.push("/dashboard/profile");
   };
-  const onLearnPress = () => {
-    router.push("/dashboard/learn");
-  };
 
   // 🧭 Navigate to Learn page with bill as param
   const onBillPress = (bill: Bill) => {
