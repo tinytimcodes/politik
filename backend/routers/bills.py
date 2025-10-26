@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from utils.firebase_utils import db
 import httpx, os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from utils.llm_utils import summarize_bill
 from fastapi import Body
+import asyncio
 
 load_dotenv()
 router = APIRouter()
@@ -39,6 +40,81 @@ def is_cache_valid(cache_doc):
         return (now - ts) < interval
     except Exception:
         return False
+
+@router.get("/billdetails")
+async def get_bill_details(congress: int, billType: str, billNumber: str):
+    """
+    Fetch and return raw JSON for a specific bill from Congress.gov.
+    """
+    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}?api_key={CONGRESS_API_KEY}&format=json"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(url)
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Congress API returned {response.status_code}: {response.text}",
+            )
+
+        return response.json()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching bill details: {str(e)}")
+    
+@router.get("/billactions")
+async def get_bill_actions(congress: int, billType: str, billNumber: str):
+    """
+    Fetch all actions for a given bill from Congress.gov.
+    Returns the raw JSON response directly.
+    """
+    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}/actions?api_key={CONGRESS_API_KEY}&format=json"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching bill actions: {str(e)}")
+
+
+@router.get("/billsummaries")
+async def get_bill_summaries(congress: int, billType: str, billNumber: str):
+    """
+    Fetch all summaries for a given bill from Congress.gov.
+    Returns the raw JSON response directly.
+    """
+    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}/summaries?api_key={CONGRESS_API_KEY}&format=json"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching bill summaries: {str(e)}")
+
+
+@router.get("/billsubjects")
+async def get_bill_subjects(congress: int, billType: str, billNumber: str):
+    """
+    Fetch subject data (policy area + legislative subjects) for a given bill.
+    Returns the raw JSON response directly.
+    """
+    url = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}/subjects?api_key={CONGRESS_API_KEY}&format=json"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching bill subjects: {str(e)}")
 
 
 @router.get("/latest")
@@ -223,3 +299,79 @@ async def get_bills_by_interest(topics: str, limit: int = 10):
         "count": len(results),
         "bills": results
     }
+
+@router.get("/billinfo")
+async def get_full_bill_info(congress: int, billType: str, billNumber: str):
+    """
+    Combine /billdetails, /billactions, /billsummaries, /billsubjects into one unified object.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            base = f"https://api.congress.gov/v3/bill/{congress}/{billType}/{billNumber}"
+
+            urls = {
+                "details": f"{base}?api_key={CONGRESS_API_KEY}&format=json",
+                "actions": f"{base}/actions?api_key={CONGRESS_API_KEY}&format=json",
+                "summaries": f"{base}/summaries?api_key={CONGRESS_API_KEY}&format=json",
+                "subjects": f"{base}/subjects?api_key={CONGRESS_API_KEY}&format=json",
+            }
+
+            responses = await asyncio.gather(
+                client.get(urls["details"]),
+                client.get(urls["actions"]),
+                client.get(urls["summaries"]),
+                client.get(urls["subjects"]),
+                return_exceptions=True,
+            )
+
+        # --- Safe JSON extraction ---
+        def safe_json(r):
+            if isinstance(r, Exception):
+                return {}
+            try:
+                return r.json()
+            except:
+                return {}
+
+        details, actions, summaries, subjects = map(safe_json, responses)
+
+        # --- Parse and unify ---
+        details_data = details.get("bill", {})
+        actions_list = actions.get("actions", [])
+        summaries_list = summaries.get("summaries", [])
+        subjects_data = subjects.get("subjects", {})
+
+        legislative_subjects = [
+            s.get("name")
+            for s in subjects_data.get("legislativeSubjects", [])
+            if s.get("name")
+        ]
+        summary_text = (
+            summaries_list[-1].get("text") if summaries_list else None
+        )
+
+        unified = {
+            "title": details_data.get("title"),
+            "congress": congress,
+            "billType": billType,
+            "billNumber": billNumber,
+            "introducedDate": details_data.get("introducedDate"),
+            "latestAction": (
+                details_data.get("latestAction", {}).get("text")
+                or (actions_list[0]["text"] if actions_list else None)
+            ),
+            "sponsor": (
+                details_data.get("sponsors", [{}])[0].get("fullName", "Unknown")
+            ),
+            "subjects": legislative_subjects,
+            "summary": summary_text,
+            "actions": [
+                {"date": a.get("actionDate"), "text": a.get("text")}
+                for a in actions_list
+            ],
+        }
+
+        return {"bill": unified}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to combine bill data: {e}")
