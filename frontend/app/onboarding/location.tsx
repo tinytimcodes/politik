@@ -11,6 +11,7 @@ import {
   View,
   KeyboardAvoidingView,
   ScrollView,
+  Alert,
 } from "react-native";
 
 const HEADLINE_FONT = Platform.select({
@@ -33,9 +34,15 @@ export default function LocationScreen() {
   const [zipValue, setZipValue] = useState("");
 
   async function handleContinue(){
+    // Check if state is provided
+    if (!stateValue.trim()) {
+      Alert.alert("State Required", "Please enter your state to continue.");
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
     if (!uid) return; // or queue locally if user not signed in yet
-
+    
     await saveOnboardingStep(uid, { state: stateValue.trim(), zip: zipValue.trim() });
     router.push("/onboarding/interests");
   };
@@ -58,7 +65,6 @@ export default function LocationScreen() {
             <Text style={styles.linkText}>Skip</Text>
           </TouchableOpacity>
         </View>
-
         <ScrollView
           style={styles.content}
           contentContainerStyle={styles.contentContainer}
@@ -71,9 +77,8 @@ export default function LocationScreen() {
               matter to you.
             </Text>
           </View>
-
           <View style={styles.form}>
-            <Text style={styles.label}>State</Text>
+            <Text style={styles.label}>State *</Text>
             <TextInput
               value={stateValue}
               onChangeText={setStateValue}
@@ -83,7 +88,6 @@ export default function LocationScreen() {
               autoCapitalize="words"
               returnKeyType="next"
             />
-
             <Text style={styles.label}>ZIP code</Text>
             <TextInput
               value={zipValue}
@@ -95,13 +99,11 @@ export default function LocationScreen() {
               returnKeyType="done"
             />
           </View>
-
           <TouchableOpacity style={styles.primaryButton} onPress={handleContinue}>
             <Text style={styles.primaryButtonText}>Continue</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-
       <View style={styles.progressContainer}>
           <View style={[styles.progressDot, styles.progressDotCompleted]} />
           <View style={[styles.progressDot, styles.progressDotActive]} />
