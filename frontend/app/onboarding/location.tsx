@@ -1,3 +1,5 @@
+import { auth } from "@/lib/firebase";
+import { saveOnboardingStep } from "@/lib/userDB";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -30,7 +32,11 @@ export default function LocationScreen() {
   const [stateValue, setStateValue] = useState("");
   const [zipValue, setZipValue] = useState("");
 
-  const handleContinue = () => {
+  async function handleContinue(){
+    const uid = auth.currentUser?.uid;
+    if (!uid) return; // or queue locally if user not signed in yet
+
+    await saveOnboardingStep(uid, { state: stateValue.trim(), zip: zipValue.trim() });
     router.push("/onboarding/interests");
   };
 

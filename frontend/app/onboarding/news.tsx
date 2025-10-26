@@ -1,3 +1,5 @@
+import { auth } from "@/lib/firebase";
+import { saveOnboardingStep, completeOnboarding } from "@/lib/userDB";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -35,9 +37,14 @@ export default function NewsScreen() {
   const router = useRouter();
   const [selectedRecency, setSelectedRecency] = useState<string>("");
 
-  const handleContinue = () => {
+  async function handleContinue() {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !selectedRecency) return;
+
+    await saveOnboardingStep(uid, { newsPreferences: [selectedRecency] });
+    await completeOnboarding(uid);
     router.replace("/dashboard/initialdash");
-  };
+  }
 
   const handleSkip = () => {
     router.replace("/");

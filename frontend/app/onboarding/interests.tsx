@@ -1,3 +1,5 @@
+import { auth } from "@/lib/firebase";
+import { saveOnboardingStep } from "@/lib/userDB";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -51,9 +53,19 @@ export default function InterestsScreen() {
     );
   };
 
-  const handleContinue = () => {
-    router.push("/onboarding/news");
-  };
+  async function handleContinue() {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    try {
+      await saveOnboardingStep(uid, {
+        interests: selectedInterests,
+      });
+      router.push("/onboarding/news");
+    } catch (e) {
+      console.log("saveOnboardingStep failed:", e);
+    }
+  }
 
   const handleSkip = () => {
     router.replace("/");
