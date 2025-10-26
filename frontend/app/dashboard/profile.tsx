@@ -3,13 +3,17 @@ import {
   View,
   Text,
   StyleSheet,
+  TouchableOpacity,
   ScrollView,
-  RefreshControl,
   Platform,
   StatusBar,
+  Dimensions,
+  RefreshControl,
 } from "react-native";
 import { doc, getDoc } from "firebase/firestore";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { db, auth } from "@/lib/firebase";
+import { useRouter } from "expo-router";
 
 type UserDoc = {
   fullName?: string;
@@ -18,6 +22,7 @@ type UserDoc = {
   interests?: string[];
   newsPreferences?: string[];
 };
+
 
 const RECENCY_LABEL: Record<string, string> = {
   "24h": "Past 24 hours",
@@ -32,6 +37,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const fetchProfile = useCallback(async () => {
     setError(null);
@@ -66,6 +72,10 @@ export default function Profile() {
     await fetchProfile();
     setRefreshing(false);
   }, [fetchProfile]);
+
+  const onProfilePress = () => {
+    router.push("/dashboard/profile");
+  };
 
   const recencyText = useMemo(() => {
     const key = data?.newsPreferences?.[0];
@@ -136,6 +146,19 @@ export default function Profile() {
             )}
           </View>
         </ScrollView>
+        <View style={styles.tabBar}>
+          
+
+          <TouchableOpacity style={styles.tab} onPress={() => {}}>
+            <MaterialCommunityIcons name="receipt-text-outline" size={28} />
+            <Text style={styles.tabLabel}>Bills</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tab} onPress={onProfilePress}>
+            <Ionicons name="person-outline" size={26} />
+            <Text style={styles.tabLabel}>Profile</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -221,4 +244,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
   },
+  tabBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: CARD,
+    borderTopWidth: 1,
+    borderTopColor: "#e6e6e6",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    paddingTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-evenly",
+  },
+  tab: { alignItems: "center", flex: 1 },
+  tabLabel: { fontSize: 11, marginTop: 4, color: "#333" },
 });
