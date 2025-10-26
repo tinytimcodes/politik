@@ -101,18 +101,20 @@ export default function Profile() {
               <Text style={styles.muted}>No profile found.</Text>
             ) : (
               <>
-                {/* State & ZIP */}
-                <Text style={styles.heading}>
-                  {(data.state || "—") + (data.zip ? `  ${data.zip}` : "")}
-                </Text>
-
                 {/* Name under state & zip */}
-                <Text style={styles.subHeading}>
+                <Text style={styles.heading}>
                   {data.fullName || "Name not set"}
                 </Text>
 
+                {/* State & ZIP */}
+                <Text style={styles.subHeading}>
+                {`State / Zip: ${data?.state ?? "—"}${data?.zip ? `, ${data.zip}` : ""}`}
+                </Text>
+
+                
+
                 {/* Preferences */}
-                <Text style={styles.label}>Preferences</Text>
+                <Text style={styles.label}>Subject Preferences</Text>
                 {Array.isArray(data.interests) && data.interests.length > 0 ? (
                   <View style={styles.chipsRow}>
                     {data.interests.map((t) => (
@@ -127,7 +129,7 @@ export default function Profile() {
 
                 {/* News recency */}
                 <Text style={[styles.label, { marginTop: 16 }]}>
-                  News Update Window
+                  News Recency preference
                 </Text>
                 <Text style={styles.bodyText}>{recencyText}</Text>
               </>
