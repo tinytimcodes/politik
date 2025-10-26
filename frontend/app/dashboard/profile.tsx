@@ -21,8 +21,8 @@ type UserDoc = {
   zip?: string;
   interests?: string[];
   newsPreferences?: string[];
+  savedBills?: string[];
 };
-
 
 const RECENCY_LABEL: Record<string, string> = {
   "24h": "Past 24 hours",
@@ -82,6 +82,11 @@ export default function Profile() {
     return key ? (RECENCY_LABEL[key] ?? key) : "Not set";
   }, [data]);
 
+  // Get saved bills with proper formatting
+  const savedBills = useMemo(() => {
+    return data?.savedBills || [];
+  }, [data]);
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
@@ -94,7 +99,6 @@ export default function Profile() {
           }
         >
           <Text style={styles.sectionTitle}>Your Profile</Text>
-
           <View style={styles.card}>
             {loading && !error ? (
               <>
@@ -115,14 +119,11 @@ export default function Profile() {
                 <Text style={styles.heading}>
                   {data.fullName || "Name not set"}
                 </Text>
-
                 {/* State & ZIP */}
                 <Text style={styles.subHeading}>
                 {`State / Zip: ${data?.state ?? "—"}${data?.zip ? `, ${data.zip}` : ""}`}
                 </Text>
-
                 
-
                 {/* Preferences */}
                 <Text style={styles.label}>Subject Preferences</Text>
                 {Array.isArray(data.interests) && data.interests.length > 0 ? (
@@ -136,7 +137,6 @@ export default function Profile() {
                 ) : (
                   <Text style={styles.muted}>No preferences selected.</Text>
                 )}
-
                 {/* News recency */}
                 <Text style={[styles.label, { marginTop: 16 }]}>
                   News Recency preference
@@ -145,15 +145,38 @@ export default function Profile() {
               </>
             )}
           </View>
-        </ScrollView>
-        <View style={styles.tabBar}>
-          
 
+          {/* ===== SAVED BILLS SECTION ===== */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Your Saved Bills</Text>
+          <View style={styles.savedBillsContainer}>
+            {loading && !error ? (
+              <>
+                <View style={[styles.billCard, styles.skeleton]} />
+                <View style={[styles.billCard, styles.skeleton]} />
+              </>
+            ) : savedBills.length === 0 ? (
+              <View style={[styles.billCard, { alignItems: "center" }]}>
+                <Text style={styles.muted}>No saved bills yet.</Text>
+              </View>
+            ) : (
+              savedBills.map((billTitle, index) => (
+                <View key={`saved-${index}`} style={styles.billCard}>
+                  <Text style={styles.billText} numberOfLines={3}>
+                    {billTitle}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={styles.tabBar}>
           <TouchableOpacity style={styles.tab} onPress={onBillTab}>
             <MaterialCommunityIcons name="receipt-text-outline" size={28} />
             <Text style={styles.tabLabel}>Bills</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.tab} onPress={() => {}}>
             <Ionicons name="person-outline" size={26} />
             <Text style={styles.tabLabel}>Profile</Text>
@@ -167,14 +190,12 @@ export default function Profile() {
 const BG = "#f2f2f2";
 const CARD = "#ffffff";
 const TEXT_DARK = "#111";
-const TOP_PAD = 50;
-  (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 28;
+const TOP_PAD = Platform.OS === "ios" ? 50 : (StatusBar.currentHeight ?? 0) + 28;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   container: { flex: 1, backgroundColor: BG, paddingTop: TOP_PAD },
   content: { paddingHorizontal: 16, paddingBottom: 24 },
-
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
@@ -182,7 +203,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.2,
   },
-
   card: {
     backgroundColor: CARD,
     padding: 16,
@@ -195,7 +215,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-
   heading: {
     fontSize: 22,
     fontWeight: "700",
@@ -207,7 +226,6 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 16,
   },
-
   label: {
     fontSize: 13,
     fontWeight: "600",
@@ -216,9 +234,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     textTransform: "uppercase",
   },
-
   bodyText: { fontSize: 16, color: TEXT_DARK },
-
   chipsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -233,17 +249,45 @@ const styles = StyleSheet.create({
     borderColor: "#e7e7e7",
   },
   chipText: { fontSize: 14, color: "#333" },
-
   muted: { color: "#666", fontSize: 14 },
-
   errorText: { color: "#b00020", fontSize: 14 },
-
   skeletonLine: {
     height: 16,
     backgroundColor: "#f0f0f0",
     borderRadius: 8,
     marginBottom: 10,
   },
+
+  // Saved Bills Styles
+  savedBillsContainer: {
+    gap: 12,
+  },
+  billCard: {
+    backgroundColor: CARD,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e7e7e7",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    minHeight: 88,
+    justifyContent: "center",
+  },
+  billText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: TEXT_DARK,
+    lineHeight: 24,
+  },
+  skeleton: { 
+    backgroundColor: "#f7f7f7", 
+    borderColor: "#ededed" 
+  },
+
   tabBar: {
     position: "absolute",
     left: 0,
