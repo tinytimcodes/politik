@@ -45,13 +45,16 @@ export default function Profile() {
         return;
       }
       const snap = await getDoc(doc(db, "users", uid));
-      setData((snap.exists() ? (snap.data() as UserDoc) : null) || {});
+      setData({
+        ...(snap.exists() ? (snap.data() as UserDoc) : {}),
+        fullName: auth.currentUser?.displayName || 'No name set'
+      });
     } catch (e: any) {
       setError(e?.message || "Failed to load profile");
       setData(null);
     } finally {
       setLoading(false);
-    }
+    }  
   }, []);
 
   useEffect(() => {

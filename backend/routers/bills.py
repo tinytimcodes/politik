@@ -44,35 +44,56 @@ def is_cache_valid(cache_doc):
 @router.get("/latest")
 async def get_latest_bills(limit: int = 5):
     """
-    Fetch the most recent bills, refreshing based on time-of-day schedule.
+    Fetch recent bills (with sponsor + chamber info).
     """
-    cache_id = f"latest_{limit}"
-    cache_ref = db.collection("bills_cache").document(cache_id)
-    cache_doc = cache_ref.get()
-
-    # 1️⃣ Check if cached data is still valid
-    if cache_doc.exists and is_cache_valid(cache_doc.to_dict()):
-        cached_data = cache_doc.to_dict().get("data", [])
-        return {"source": "cache", "count": len(cached_data), "bills": cached_data}
-
-    # 2️⃣ Otherwise, fetch fresh data from Congress.gov
     try:
         params = {"api_key": CONGRESS_API_KEY, "limit": limit}
         async with httpx.AsyncClient() as client:
             response = await client.get(BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
-            bills = data.get("bills", [])
+            raw_bills = data.get("bills", [])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Congress.gov API failed: {e}")
 
-    # 3️⃣ Store new data in Firestore with a timestamp
-    cache_ref.set({
-        "timestamp": datetime.now().isoformat(),
-        "data": bills
-    })
+    bills = []
+    async with httpx.AsyncClient() as client:
+        for b in raw_bills:
+            congress = b.get("congress")
+            bill_type = b.get("type")
+            number = b.get("number")
+
+            # base info
+            bill_info = {
+                "title": b.get("title"),
+                "introducedDate": b.get("introducedDate"),
+                "congress": congress,
+                "type": bill_type,
+                "number": number,
+                "latestAction": b.get("latestAction", {}),
+            }
+
+            # fetch details to get sponsor + chamber info
+            try:
+                detail_url = f"https://api.congress.gov/v3/bill/{congress}/{bill_type}/{number}?api_key={CONGRESS_API_KEY}"
+                detail_resp = await client.get(detail_url)
+                if detail_resp.status_code == 200:
+                    detail_data = detail_resp.json().get("bill", {})
+                    sponsors = detail_data.get("sponsors", [])
+                    origin_chamber = detail_data.get("originChamber", "Unknown")
+                    sponsor_party = (
+                        sponsors[0].get("party") if sponsors and isinstance(sponsors, list) else None
+                    )
+                    bill_info["sponsors"] = sponsors
+                    bill_info["originChamber"] = origin_chamber
+                    bill_info["sponsorParty"] = sponsor_party
+            except Exception as e:
+                print(f"⚠️ Skipped detail fetch for {bill_type}{number}: {e}")
+
+            bills.append(bill_info)
 
     return {"source": "api", "count": len(bills), "bills": bills}
+
 
 
 @router.get("/details/{congress}/{bill_type}/{number}")
@@ -135,3 +156,70 @@ async def get_bill_details(congress: int, bill_type: str, number: int):
 
     details_ref.set(result)
     return {"source": "api", **result}
+
+
+
+@router.get("/interests")
+async def get_bills_by_interest(topics: str, limit: int = 10):
+    """
+    Fetch recent bills related to user's selected interests.
+    Example:
+        /bills/interests?topics=healthcare,education,economy
+    """
+
+    # ✅ Interest keyword mapping
+    INTEREST_KEYWORDS = {
+        "healthcare": ["health", "medical", "hospital", "insurance", "medicare", "medicaid", "care", "patient"],
+        "education": ["school", "education", "student", "teacher", "college", "university", "loan"],
+        "economy": ["tax", "inflation", "commerce", "budget", "finance", "trade", "employment", "labor"],
+        "business": ["small business", "corporate", "entrepreneur", "startup", "industry", "company"],
+        "environment": ["climate", "environment", "pollution", "energy", "carbon", "forest", "wildlife"],
+        "congress": ["ethics", "procedure", "reform", "legislature", "committee", "governance"]
+    }
+
+    # Normalize user topics
+    raw_topics = [t.strip().lower() for t in topics.split(",") if t.strip()]
+    if not raw_topics:
+        raise HTTPException(status_code=400, detail="No topics provided.")
+
+    # Expand all mapped keywords
+    keywords = []
+    for t in raw_topics:
+        keywords.extend(INTEREST_KEYWORDS.get(t, [t]))
+
+    # 1️⃣ Query the Congress API for recent bills
+    try:
+        params = {"api_key": CONGRESS_API_KEY, "limit": limit * 3}  # fetch a bit more to filter down
+        async with httpx.AsyncClient() as client:
+            response = await client.get(BASE_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+            bills = data.get("bills", [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Congress API failed: {e}")
+
+    # 2️⃣ Filter bills by title, policyArea, or subjects
+    filtered = []
+    for bill in bills:
+        title = (bill.get("title") or "").lower()
+        policy = (bill.get("policyArea", {}).get("name") or "").lower()
+        subjects = bill.get("subjects", {})
+        subject_items = subjects.get("item", [])
+        subject_names = " ".join(
+            s.get("name", "").lower() for s in subject_items if isinstance(subject_items, list)
+        )
+
+        # Check if any keyword appears
+        if any(k in title or k in policy or k in subject_names for k in keywords):
+            filtered.append(bill)
+
+    # 3️⃣ Limit the results
+    results = filtered[:limit]
+
+    return {
+        "source": "api",
+        "topics": raw_topics,
+        "keywords_used": keywords,
+        "count": len(results),
+        "bills": results
+    }
