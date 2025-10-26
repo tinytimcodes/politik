@@ -103,10 +103,10 @@ export default function Dashboard() {
   }, [fetchBills, fetchForYouBills]);
 
   const onProfilePress = () => {
-    router.replace("/dashboard/profile");
+    router.push("/dashboard/profile");
   };
   const onLearnPress = () => {
-    router.replace("/dashboard/learn");
+    router.push("/dashboard/learn");
   };
 
   // 🧭 Navigate to Learn page with bill as param
@@ -243,10 +243,7 @@ export default function Dashboard() {
 
         {/* ===== TAB BAR ===== */}
         <View style={styles.tabBar}>
-          <TouchableOpacity style={styles.tabLeft} onPress={onLearnPress}>
-            <Ionicons name="school-outline" size={26} />
-            <Text style={styles.tabLabel}>Learn</Text>
-          </TouchableOpacity>
+          
 
           <TouchableOpacity style={styles.tabCenter} onPress={() => {}}>
             <MaterialCommunityIcons name="receipt-text-outline" size={28} />
