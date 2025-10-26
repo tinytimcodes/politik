@@ -21,16 +21,13 @@ const { height } = Dimensions.get("window");
 const BASE_IP = "http://10.136.133.120:8000"; // update for your dev IP
 const LATEST_URL = `${BASE_IP}/bills/latest?limit=3`;
 
-type Bill = { title?: string; [k: string]: any };
-
-const INTERESTS = [
-  "Healthcare",
-  "Education",
-  "Environment",
-  "Economy",
-  "Congress",
-  "Business",
-];
+type Bill = {
+  title?: string;
+  congress?: string | number;
+  type?: string;
+  number?: string | number;
+  [k: string]: any;
+};
 
 export default function Dashboard() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -112,6 +109,20 @@ export default function Dashboard() {
     router.replace("/dashboard/learn");
   };
 
+  // 🧭 Navigate to Learn page with bill as param
+  const onBillPress = (bill: Bill) => {
+    router.push({
+      pathname: "/dashboard/learn",
+      params: {
+        title: bill.title || "Untitled Bill",
+        congress: String(bill.congress ?? ""),
+        type: String(bill.type ?? ""),
+        number: String(bill.number ?? ""),
+      },
+    });
+  };
+
+  // Format the bills properly for display
   const displayBills = useMemo(
     () =>
       bills.map((b, i) => {
@@ -119,12 +130,13 @@ export default function Dashboard() {
           typeof b.title === "string" && b.title.trim().length > 0
             ? b.title
             : "Untitled Bill";
+        const congress = b.congress ?? "unknown";
+        const billType = b.type ?? "unknown";
+        const number = b.number ?? i;
         return {
           ...b,
           _displayTitle: title,
-          _key: `${b.congress ?? "c"}-${b.type ?? "t"}-${
-            b.number ?? i
-          }-${i}`,
+          _key: `${congress}-${billType}-${number}-${i}`,
         };
       }),
     [bills]
@@ -137,22 +149,17 @@ export default function Dashboard() {
           typeof b.title === "string" && b.title.trim().length > 0
             ? b.title
             : "Untitled Bill";
+        const congress = b.congress ?? "unknown";
+        const billType = b.type ?? "unknown";
+        const number = b.number ?? i;
         return {
           ...b,
           _displayTitle: title,
-          _key: `forYou-${b.number ?? i}-${i}`,
+          _key: `forYou-${billType}-${number}-${i}`,
         };
       }),
     [forYouBills]
   );
-
-  // 🧭 Navigate to bill details
-  const onBillPress = (billId: string) => {
-    router.push({
-      pathname: "/dashboard/bill/[id]",
-      params: { id: billId },
-    });
-  };
 
   return (
     <View style={styles.root}>
@@ -188,7 +195,7 @@ export default function Dashboard() {
               displayBills.map((bill) => (
                 <TouchableOpacity
                   key={bill._key}
-                  onPress={() => onBillPress(bill._key)}
+                  onPress={() => onBillPress(bill)}
                 >
                   <View style={styles.billCard}>
                     <View style={styles.billLeft}>
@@ -196,11 +203,7 @@ export default function Dashboard() {
                         {bill._displayTitle}
                       </Text>
                     </View>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={22}
-                      color="#666"
-                    />
+                    <Ionicons name="chevron-forward" size={22} color="#666" />
                   </View>
                 </TouchableOpacity>
               ))
@@ -220,7 +223,7 @@ export default function Dashboard() {
               displayForYou.map((bill) => (
                 <TouchableOpacity
                   key={bill._key}
-                  onPress={() => onBillPress(bill._key)}
+                  onPress={() => onBillPress(bill)}
                 >
                   <View style={styles.billCard}>
                     <View style={styles.billLeft}>
@@ -228,11 +231,7 @@ export default function Dashboard() {
                         {bill._displayTitle}
                       </Text>
                     </View>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={22}
-                      color="#666"
-                    />
+                    <Ionicons name="chevron-forward" size={22} color="#666" />
                   </View>
                 </TouchableOpacity>
               ))
@@ -302,21 +301,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   billLeft: { flex: 2, paddingRight: 8 },
-  billRight: {
-    flex: 1,
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
   billText: {
     fontSize: 18,
     fontWeight: "600",
     color: TEXT_DARK,
     lineHeight: 24,
-  },
-  chamberText: {
-    fontSize: 15,
-    fontWeight: "700",
-    textAlign: "right",
   },
   skeleton: { backgroundColor: "#f7f7f7", borderColor: "#ededed" },
   forYouText: { color: "#444", fontSize: 14, lineHeight: 20 },
