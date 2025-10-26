@@ -1,4 +1,3 @@
-// app/dashboard.tsx
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
@@ -10,10 +9,14 @@ import {
   StatusBar,
   Dimensions,
   RefreshControl,
+  Modal,
+  Alert,
 } from "react-native";
 import axios from "axios";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { getFirestore, doc, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 const { height } = Dimensions.get("window");
 
@@ -40,7 +43,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedBills, setSavedBills] = useState<string[]>([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [billToSave, setBillToSave] = useState<Bill | null>(null);
+  
   const router = useRouter();
+  const auth = getAuth();
+  const db = getFirestore();
 
   // 🧠 Fetch most recent bills
   const fetchBills = useCallback(async (signal?: AbortSignal) => {
@@ -58,7 +67,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  // 🧠 Fetch personalized “For You” bills
+  // 🧠 Fetch personalized "For You" bills
   const fetchForYouBills = useCallback(
     async (topics: string[], signal?: AbortSignal) => {
       try {
@@ -83,13 +92,29 @@ export default function Dashboard() {
     []
   );
 
+  // 🔥 Fetch saved bills from Firebase
+  const fetchSavedBills = useCallback(async () => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setSavedBills(userData.savedBills || []);
+      }
+    } catch (error) {
+      console.log("Error fetching saved bills:", error);
+    }
+  }, [auth.currentUser, db]);
+
   // 🌐 Fetch both sections when mounted
   useEffect(() => {
     const controller = new AbortController();
     fetchBills(controller.signal);
     fetchForYouBills(selectedTopics, controller.signal);
+    fetchSavedBills();
     return () => controller.abort();
-  }, [fetchBills, fetchForYouBills, selectedTopics]);
+  }, [fetchBills, fetchForYouBills, selectedTopics, fetchSavedBills]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -97,10 +122,11 @@ export default function Dashboard() {
     await Promise.all([
       fetchBills(controller.signal),
       fetchForYouBills(selectedTopics, controller.signal),
+      fetchSavedBills(),
     ]);
     controller.abort();
     setRefreshing(false);
-  }, [fetchBills, fetchForYouBills]);
+  }, [fetchBills, fetchForYouBills, fetchSavedBills]);
 
   const onProfilePress = () => {
     router.push("/dashboard/profile");
@@ -117,6 +143,41 @@ export default function Dashboard() {
         number: String(bill.number ?? ""),
       },
     });
+  };
+
+  // ⭐ Handle star press
+  const onStarPress = (bill: Bill) => {
+    setBillToSave(bill);
+    setShowSaveModal(true);
+  };
+
+  // 💾 Save bill to Firebase
+  const saveBillToFirebase = async () => {
+    if (!auth.currentUser || !billToSave) return;
+
+    try {
+      const billTitle = billToSave.title || "Untitled Bill";
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      
+      await updateDoc(userRef, {
+        savedBills: arrayUnion(billTitle)
+      });
+
+      setSavedBills(prev => [...prev, billTitle]);
+      setShowSaveModal(false);
+      setBillToSave(null);
+      
+      Alert.alert("Success", "Bill saved successfully!");
+    } catch (error) {
+      console.log("Error saving bill:", error);
+      Alert.alert("Error", "Failed to save bill. Please try again.");
+    }
+  };
+
+  // Check if bill is saved
+  const isBillSaved = (bill: Bill) => {
+    const billTitle = bill.title || "Untitled Bill";
+    return savedBills.includes(billTitle);
   };
 
   // Format the bills properly for display
@@ -181,7 +242,7 @@ export default function Dashboard() {
             ) : error ? (
               <View style={[styles.billCard, { alignItems: "center" }]}>
                 <Text style={styles.errorText}>
-                  Couldn’t load bills ({error}). Pull to refresh.
+                  Couldn't load bills ({error}). Pull to refresh.
                 </Text>
               </View>
             ) : displayBills.length === 0 ? (
@@ -200,7 +261,22 @@ export default function Dashboard() {
                         {bill._displayTitle}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={22} color="#666" />
+                    <View style={styles.billRight}>
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          onStarPress(bill);
+                        }}
+                        style={styles.starButton}
+                      >
+                        <Ionicons
+                          name={isBillSaved(bill) ? "star" : "star-outline"}
+                          size={22}
+                          color={isBillSaved(bill) ? "#FFD700" : "#999"}
+                        />
+                      </TouchableOpacity>
+                      <Ionicons name="chevron-forward" size={22} color="#666" />
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))
@@ -228,30 +304,75 @@ export default function Dashboard() {
                         {bill._displayTitle}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={22} color="#666" />
+                    <View style={styles.billRight}>
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          onStarPress(bill);
+                        }}
+                        style={styles.starButton}
+                      >
+                        <Ionicons
+                          name={isBillSaved(bill) ? "star" : "star-outline"}
+                          size={22}
+                          color={isBillSaved(bill) ? "#FFD700" : "#999"}
+                        />
+                      </TouchableOpacity>
+                      <Ionicons name="chevron-forward" size={22} color="#666" />
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))
             )}
           </View>
-
           <View style={{ height: Math.floor(height * 0.12) }} />
         </ScrollView>
 
         {/* ===== TAB BAR ===== */}
         <View style={styles.tabBar}>
-          
-
           <TouchableOpacity style={styles.tab} onPress={() => {}}>
             <MaterialCommunityIcons name="receipt-text-outline" size={28} />
             <Text style={styles.tabLabel}>Bills</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.tab} onPress={onProfilePress}>
             <Ionicons name="person-outline" size={26} />
             <Text style={styles.tabLabel}>Profile</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ===== SAVE BILL MODAL ===== */}
+        <Modal
+          visible={showSaveModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowSaveModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Save Bill</Text>
+              <Text style={styles.modalText}>
+                Do you want to save this bill?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setShowSaveModal(false);
+                    setBillToSave(null);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={saveBillToFirebase}
+                >
+                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </View>
   );
@@ -261,8 +382,7 @@ export default function Dashboard() {
 const BG = "#f2f2f2";
 const CARD = "#ffffff";
 const TEXT_DARK = "#111";
-const TOP_PAD = 50;
-  (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 28;
+const TOP_PAD = Platform.OS === "ios" ? 50 : (StatusBar.currentHeight ?? 0) + 28;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
@@ -294,7 +414,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  billLeft: { flex: 2, paddingRight: 8 },
+  billLeft: { flex: 1, paddingRight: 8 },
+  billRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  starButton: {
+    padding: 4,
+  },
   billText: {
     fontSize: 18,
     fontWeight: "600",
@@ -321,4 +449,62 @@ const styles = StyleSheet.create({
   },
   tab: { alignItems: "center", flex: 1 },
   tabLabel: { fontSize: 11, marginTop: 4, color: "#333" },
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: CARD,
+    borderRadius: 16,
+    padding: 24,
+    marginHorizontal: 32,
+    minWidth: 280,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: TEXT_DARK,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalText: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 24,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  cancelButton: {
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  confirmButton: {
+    backgroundColor: "#007AFF",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
 });
