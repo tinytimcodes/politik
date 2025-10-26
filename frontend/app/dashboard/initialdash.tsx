@@ -1,3 +1,4 @@
+// app/dashboard.tsx
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
@@ -15,7 +16,7 @@ import {
 import axios from "axios";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { getFirestore, doc, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
+import { getFirestore, doc, updateDoc, arrayUnion, arrayRemove, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const { height } = Dimensions.get("window");
@@ -45,7 +46,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [savedBills, setSavedBills] = useState<string[]>([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [billToSave, setBillToSave] = useState<Bill | null>(null);
+  const [billToRemove, setBillToRemove] = useState<Bill | null>(null);
   
   const router = useRouter();
   const auth = getAuth();
@@ -145,10 +148,18 @@ export default function Dashboard() {
     });
   };
 
-  // ⭐ Handle star press
+  // ⭐ Handle star press - check if saving or removing
   const onStarPress = (bill: Bill) => {
-    setBillToSave(bill);
-    setShowSaveModal(true);
+    const billTitle = bill.title || "Untitled Bill";
+    const isAlreadySaved = savedBills.includes(billTitle);
+    
+    if (isAlreadySaved) {
+      setBillToRemove(bill);
+      setShowRemoveModal(true);
+    } else {
+      setBillToSave(bill);
+      setShowSaveModal(true);
+    }
   };
 
   // 💾 Save bill to Firebase
@@ -171,6 +182,29 @@ export default function Dashboard() {
     } catch (error) {
       console.log("Error saving bill:", error);
       Alert.alert("Error", "Failed to save bill. Please try again.");
+    }
+  };
+
+  // 🗑️ Remove bill from Firebase
+  const removeBillFromFirebase = async () => {
+    if (!auth.currentUser || !billToRemove) return;
+
+    try {
+      const billTitle = billToRemove.title || "Untitled Bill";
+      const userRef = doc(db, "users", auth.currentUser.uid);
+      
+      await updateDoc(userRef, {
+        savedBills: arrayRemove(billTitle)
+      });
+
+      setSavedBills(prev => prev.filter(title => title !== billTitle));
+      setShowRemoveModal(false);
+      setBillToRemove(null);
+      
+      Alert.alert("Success", "Bill removed from favorites!");
+    } catch (error) {
+      console.log("Error removing bill:", error);
+      Alert.alert("Error", "Failed to remove bill. Please try again.");
     }
   };
 
@@ -373,6 +407,40 @@ export default function Dashboard() {
             </View>
           </View>
         </Modal>
+
+        {/* ===== REMOVE BILL MODAL ===== */}
+        <Modal
+          visible={showRemoveModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowRemoveModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Remove from Favorites</Text>
+              <Text style={styles.modalText}>
+                Do you want to remove this bill from favorites?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setShowRemoveModal(false);
+                    setBillToRemove(null);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.removeButton]}
+                  onPress={removeBillFromFirebase}
+                >
+                  <Text style={styles.removeButtonText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </View>
   );
@@ -497,12 +565,20 @@ const styles = StyleSheet.create({
   confirmButton: {
     backgroundColor: "#007AFF",
   },
+  removeButton: {
+    backgroundColor: "#FF3B30",
+  },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#666",
   },
   confirmButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  removeButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#fff",
