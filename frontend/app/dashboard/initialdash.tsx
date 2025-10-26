@@ -245,12 +245,12 @@ export default function Dashboard() {
         <View style={styles.tabBar}>
           
 
-          <TouchableOpacity style={styles.tabCenter} onPress={() => {}}>
+          <TouchableOpacity style={styles.tab} onPress={() => {}}>
             <MaterialCommunityIcons name="receipt-text-outline" size={28} />
             <Text style={styles.tabLabel}>Bills</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tabRight} onPress={onProfilePress}>
+          <TouchableOpacity style={styles.tab} onPress={onProfilePress}>
             <Ionicons name="person-outline" size={26} />
             <Text style={styles.tabLabel}>Profile</Text>
           </TouchableOpacity>
@@ -264,7 +264,7 @@ export default function Dashboard() {
 const BG = "#f2f2f2";
 const CARD = "#ffffff";
 const TEXT_DARK = "#111";
-const TOP_PAD =
+const TOP_PAD = 50;
   (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 28;
 
 const styles = StyleSheet.create({
@@ -315,15 +315,13 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderTopWidth: 1,
     borderTopColor: "#e6e6e6",
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingBottom: 10,
     paddingTop: 8,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "space-evenly",
   },
-  tabLeft: { alignItems: "center", width: 64 },
-  tabCenter: { alignItems: "center", width: 64 },
-  tabRight: { alignItems: "center", width: 64 },
+  tab: { alignItems: "center", flex: 1 },
   tabLabel: { fontSize: 11, marginTop: 4, color: "#333" },
 });

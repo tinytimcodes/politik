@@ -144,7 +144,7 @@ export default function Profile() {
 const BG = "#f2f2f2";
 const CARD = "#ffffff";
 const TEXT_DARK = "#111";
-const TOP_PAD =
+const TOP_PAD = 50;
   (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 28;
 
 const styles = StyleSheet.create({
