@@ -13,27 +13,62 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import axios from "axios";
+import { useAuth } from "../../lib/AuthContext";
+import { db } from "../../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { Image } from "react-native";
+import defaultAvatar from "../../assets/images/prof.png";
+
+function getPartyColor(sponsor: string | undefined): string {
+  if (!sponsor) return "#ccc";
+  const match = sponsor.match(/\[(.)\]/);
+  if (!match) return "#ccc";
+  const letter = match[1].toUpperCase();
+  if (letter === "D") return "#007AFF"; // Blue for Democrats
+  if (letter === "R") return "#FF3B30"; // Red for Republicans
+  return "#ccc"; // Neutral fallback
+}
+
+
 
 const BASE_IP = "http://10.136.133.120:8000";
 
 export default function Learn() {
+
+  const { user } = useAuth();   // ✅ access logged-in user
+  const [userProfile, setUserProfile] = useState<any>(null);
+
   const { title, congress, type, number } = useLocalSearchParams();
   const [mode, setMode] = useState<"details" | "ai">("details");
   const [bill, setBill] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // summaries dropdown
-  const [showSummaries, setShowSummaries] = useState(false);
-  const [summaries, setSummaries] = useState<any[]>([]);
-  const [summariesLoading, setSummariesLoading] = useState(false);
-  const [summariesError, setSummariesError] = useState<string | null>(null);
+  // --- AI Summary state ---
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
 
-  // AI Chat state
+  // --- AI Chat state ---
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // --- Fetch user profile ---
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user) return;
+      try {
+        const userDoc = doc(db, "users", user.uid);
+        const docSnap = await getDoc(userDoc);
+        setUserProfile(docSnap.data());
+      } catch (err) {
+        console.error("❌ Failed to fetch user profile:", err);
+      }
+    };
+
+    fetchUserProfile();
+  }, [user]);
 
   // --- Fetch bill details ---
   useEffect(() => {
@@ -46,7 +81,7 @@ export default function Learn() {
         const data = res.data.bill || res.data;
         const billData = data.bill || data;
 
-        setBill({
+        const newBill = {
           title: billData.title || title || "N/A",
           introducedDate: billData.introducedDate || "N/A",
           latestAction:
@@ -61,7 +96,9 @@ export default function Learn() {
           type,
           number,
           rawData: billData,
-        });
+        };
+
+        setBill(newBill);
       } catch (err) {
         console.warn("❌ Failed to fetch bill details:", err);
         setError("Unable to load bill info. Showing default data.");
@@ -78,74 +115,70 @@ export default function Learn() {
       }
     };
 
-    if (mode === "details" || mode === "ai") fetchBill();
+    fetchBill();
   }, [mode]);
 
-  // --- Auto-generate summary immediately when AI mode opens ---
-  // --- Auto-start chat when AI mode opens ---
-// --- Auto-greeting from AI when AI mode opens ---
-useEffect(() => {
-  if (mode === "ai" && bill && messages.length === 0) {
-    const greeting = {
-      role: "assistant",
-      content: `👋 What can I tell you about the "${bill.title}"?`,
+  // --- Fetch AI Summary once bill loads ---
+  useEffect(() => {
+    const fetchAiSummary = async () => {
+      if (!bill || mode !== "details") return;
+      setAiSummaryLoading(true);
+      try {
+        const res = await axios.post(`${BASE_IP}/ai/summarize`, { bill });
+        setAiSummary(res.data.summary || "⚠️ No AI summary available.");
+      } catch (err) {
+        console.error("❌ AI Summary Error:", err);
+        setAiSummary("⚠️ Failed to generate AI summary.");
+      } finally {
+        setAiSummaryLoading(false);
+      }
     };
-    setMessages([greeting]);
-  }
-}, [mode, bill]);
 
+    fetchAiSummary();
+  }, [bill, mode]);
 
-
-  // --- Fetch summaries dropdown ---
-  const fetchSummaries = async () => {
-    if (showSummaries) return setShowSummaries(false);
-    setSummariesLoading(true);
-    setSummariesError(null);
-    try {
-      const url = `${BASE_IP}/bills/billsummaries?congress=${congress}&billType=${type}&billNumber=${number}`;
-      const res = await axios.get(url);
-      const list = res.data.summaries || res.data?.summaries || [];
-      setSummaries(
-        list.map((s: any) => ({
-          date: s.updateDate || s.actionDate || "N/A",
-          text: s.text || "No summary available.",
-        }))
-      );
-      setShowSummaries(true);
-    } catch (err) {
-      console.warn("❌ Failed to fetch summaries:", err);
-      setSummariesError("Unable to load summaries.");
-    } finally {
-      setSummariesLoading(false);
+  // --- Auto greeting in AI mode ---
+  // --- Auto greeting in AI mode ---
+    useEffect(() => {
+    if (mode === "ai" && bill && messages.length === 0) {
+        const userState = userProfile?.state || "the United States";
+        const greeting = {
+        role: "assistant",
+        content: `What can I tell you about the "${bill.title}"?\n\nI’m here as a representative from ${userState} to better explain how this bill may relate to your region and community.`,
+        };
+        setMessages([greeting]);
     }
-  };
+    }, [mode, bill, userProfile]);
 
-  // --- Send AI message ---
+
+  // --- Send AI chat message ---
   const sendMessage = async () => {
-    if (!input.trim() || !bill) return;
-    const userMessage = { role: "user", content: input.trim() };
-    const updated = [...messages, userMessage];
-    setMessages(updated);
-    setInput("");
-    setSending(true);
-    try {
-      const res = await axios.post(`${BASE_IP}/ai/chat`, {
-        bill,
-        messages: updated,
-      });
-      const reply = res.data.reply || "⚠️ No response.";
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    } catch (err) {
-      console.error("Chat error:", err);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "⚠️ Failed to get AI response." },
-      ]);
-    } finally {
-      setSending(false);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300);
-    }
-  };
+  if (!input.trim() || !bill) return;
+  const userMessage = { role: "user", content: input.trim() };
+  const updated = [...messages, userMessage];
+  setMessages(updated);
+  setInput("");
+  setSending(true);
+  try {
+    const res = await axios.post(`${BASE_IP}/ai/chat`, {
+      bill,
+      messages: updated,
+      userState: userProfile?.state || "the United States", // ✅ send state to backend
+    });
+    const reply = res.data.reply || "⚠️ No response.";
+    setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+  } catch (err) {
+    console.error("Chat error:", err);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "⚠️ Failed to get AI response." },
+    ]);
+  } finally {
+    setSending(false);
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300);
+  }
+};
+
 
   // === UI ===
   return (
@@ -207,31 +240,15 @@ useEffect(() => {
                   </Text>
                 </View>
 
-                {/* === SUMMARY SECTION === */}
+                {/* === AI Summary Section === */}
                 <View style={styles.section}>
-                  <TouchableOpacity onPress={fetchSummaries} style={styles.dropdownHeader}>
-                    <Text style={styles.sectionHeader}>
-                      {showSummaries ? "▼ Bill Summaries" : "▶ Bill Summaries"}
+                  <Text style={styles.sectionHeader}>AI Summary</Text>
+                  {aiSummaryLoading ? (
+                    <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 10 }} />
+                  ) : (
+                    <Text style={styles.sectionBody}>
+                      {aiSummary || "⚠️ No AI summary available."}
                     </Text>
-                  </TouchableOpacity>
-
-                  {showSummaries && (
-                    <View style={{ marginTop: 8 }}>
-                      {summariesLoading ? (
-                        <ActivityIndicator size="small" color="#007AFF" />
-                      ) : summariesError ? (
-                        <Text style={styles.errorText}>{summariesError}</Text>
-                      ) : summaries.length > 0 ? (
-                        summaries.map((s, idx) => (
-                          <View key={idx} style={styles.summaryItem}>
-                            <Text style={styles.summaryDate}>🗓 {s.date}</Text>
-                            <Text style={styles.summaryText}>{s.text}</Text>
-                          </View>
-                        ))
-                      ) : (
-                        <Text style={styles.sectionBody}>No summaries available.</Text>
-                      )}
-                    </View>
                   )}
                 </View>
               </>
@@ -247,24 +264,28 @@ useEffect(() => {
                 scrollViewRef.current?.scrollToEnd({ animated: true })
               }
             >
-              {messages.map((m, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.chatBubble,
-                    m.role === "user" ? styles.userBubble : styles.botBubble,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.chatText,
-                      m.role === "user" && { color: "#fff" },
-                    ]}
-                  >
-                    {m.content}
-                  </Text>
-                </View>
-              ))}
+              {messages.map((m, i) =>
+                m.role === "assistant" ? (
+                    <View key={i} style={styles.botRow}>
+                    <Image
+                        source={defaultAvatar}
+                        style={[
+                            styles.botAvatar,
+                            { borderColor: getPartyColor(bill?.sponsor), borderWidth: 2 },
+                        ]}
+                        />
+
+                    <View style={[styles.chatBubble, styles.botBubble]}>
+                        <Text style={styles.chatText}>{m.content}</Text>
+                    </View>
+                    </View>
+                ) : (
+                    <View key={i} style={[styles.chatBubble, styles.userBubble]}>
+                    <Text style={[styles.chatText, { color: "#fff" }]}>{m.content}</Text>
+                    </View>
+                )
+                )}
+
             </ScrollView>
 
             <View style={styles.chatInputContainer}>
@@ -322,15 +343,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: 16 },
   sectionHeader: { fontSize: 16, fontWeight: "700", color: "#222", marginBottom: 4 },
   sectionBody: { fontSize: 15, color: "#333", lineHeight: 22 },
-  dropdownHeader: { flexDirection: "row", alignItems: "center" },
-  summaryItem: {
-    backgroundColor: "#f0f6ff",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-  },
-  summaryDate: { fontSize: 13, color: "#007AFF", fontWeight: "600", marginBottom: 4 },
-  summaryText: { fontSize: 14, color: "#333", lineHeight: 20 },
   errorText: {
     color: "#b00020",
     marginTop: 10,
@@ -371,4 +383,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginLeft: 6,
   },
+  botRow: {
+  flexDirection: "row",
+  alignItems: "flex-start",
+  marginVertical: 6,
+  maxWidth: "90%",
+  alignSelf: "flex-start",
+},
+botAvatar: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  marginRight: 8,
+  backgroundColor: "#ccc",
+},
 });

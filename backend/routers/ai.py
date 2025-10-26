@@ -23,27 +23,17 @@ async def ai_chat(payload: dict = Body(...)):
 
         bill = payload.get("bill", {})
         messages = payload.get("messages", [])
+        user_state = payload.get("userState", "an American citizen")  # default fallback
 
-        # --- Fetch summaries JSON from your summaries endpoint ---
-        try:
-            backend_base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
-            summaries_url = f"{backend_base}/bills/billsummaries?congress={bill.get('congress')}&billType={bill.get('type')}&billNumber={bill.get('number')}"
-            summaries_res = requests.get(summaries_url, timeout=10)
-            summaries_json = summaries_res.json().get("summaries", [])
-        except Exception as e:
-            print("⚠️ Failed to fetch summaries:", e)
-            summaries_json = []
-
-        # --- Build summary text snippet for Gemini ---
-        summaries_text = "\n\n".join(
-            [f"- {s.get('date', 'N/A')}: {s.get('text', 'No summary text available.')}"
-             for s in summaries_json]
-        ) or "No summaries found."
-
+        # Craft personalized system prompt based on state
         system_prompt = f"""
-        You are an AI legislative assistant who explains U.S. congressional bills clearly.
-        Be factual, structured, and conversational.
-        Always base your answers on the provided context.
+        You are an AI legislative assistant helping explain U.S. congressional bills.
+        Speak clearly, factually, and conversationally.
+
+        You are acting as a policy representative from the state of {user_state}.
+        Emphasize relevance or context to that state if possible (e.g., economic impact, local programs, etc.).
+
+        Always stay nonpartisan unless instructed otherwise. Your role is to make the bill understandable.
 
         Bill Context:
         Title: {bill.get('title')}
@@ -55,28 +45,16 @@ async def ai_chat(payload: dict = Body(...)):
         Sponsor: {bill.get('sponsor')}
         Policy Area: {', '.join(bill.get('subjects', []))}
         Summary: {bill.get('summary')}
-
-        Additional Bill Summaries:
-        {summaries_text}
-
-
-        if there is nothing in the summaries, Use the context of the other stuff as well as any information you might know to come up with an answer that will give the user a good understanding of the bill 
         """
 
         chat_text = "\n".join(
             [f"{m['role'].capitalize()}: {m['content']}" for m in messages]
         )
-
         full_prompt = f"{system_prompt}\n\nConversation so far:\n{chat_text}\nAssistant:"
-
-        print("🧠 [Gemini Prompt Start] ----------------------")
-        print(full_prompt[:1000])
-        print("🧠 [Gemini Prompt End] ------------------------")
 
         result = model.generate_content(full_prompt)
         reply = getattr(result, "text", None)
         if not reply:
-            print("⚠️ Gemini returned no text. Full response:", result)
             reply = "⚠️ Gemini returned no response text."
 
         return {"reply": reply.strip()}
